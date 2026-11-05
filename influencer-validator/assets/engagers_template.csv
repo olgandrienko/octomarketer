@@ -1,0 +1,3 @@
+post_url,name,headline_or_bio,action,comment_text,is_creator_reply
+https://www.linkedin.com/posts/example-activity-123,Jane Doe,Head of Growth at Acme (B2B SaaS),reaction,,no
+https://www.linkedin.com/posts/example-activity-123,John Roe,Content Lead | Fintech,comment,"How do you track this across Perplexity too?",no

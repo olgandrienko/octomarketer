@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: links-only-no-apify
+expected_outcome: |
+  The most common start: a user with no project context and no Apify token pastes creator links.
+  The first reply says straight away that there is no Apify access and that no verdict will be given
+  from old or remembered numbers. It offers the three fresh-data routes (add an APIFY_TOKEN via the
+  environment settings without pasting it into chat, collect in the user's logged-in browser, or
+  upload analytics, scraper exports or screenshots), and in the same message asks only for the product
+  or campaign and the target buyer / ICP. It does not ask for a price, rate, deliverables or budget,
+  and it shows no engagement numbers, scores or verdicts for the creators.
