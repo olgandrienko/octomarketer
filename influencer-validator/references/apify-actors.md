@@ -14,11 +14,10 @@ These are the same actor families the research study used (posts, comments, prof
 
 Roughly USD 0.30–1.50 per creator. The research run cost USD 85.61 for ~1,000 accounts across YouTube/LinkedIn/X. `fetch_log.json` records `usd` per actor run; report the total to the user. Lower `--comments-per-post` / `--max-profiles` for big batches.
 
-## Token
+## Access: MCP connector first, token second
 
-`APIFY_TOKEN` in the environment or in `.env` in the working directory. If it is missing, tell the user to create one (Apify console → Settings → Integrations) and store it as `APIFY_TOKEN`: in a cloud session via the environment settings (secrets / environment variables, which a new session picks up), locally in `.env`. Never ask them to paste it into chat, never print it, and never write it into report files.
-
-If an Apify MCP server is connected instead (tools like `call-actor`, `fetch-actor-details`), you can call the same actors through it, save the dataset items as JSON, and normalize them into `posts.json` / `comments.json` / `engagers.json` in the shape described in `scripts/apify_fetch.py`. The metric and verdict scripts only care about those normalized files.
+- **Apify MCP connector** (preferred): `https://mcp.apify.com`, authorized with OAuth (an Apify login in the browser). Claude Code: `claude mcp add --transport http apify https://mcp.apify.com`, then `/mcp` → apify → Authenticate. Claude.ai / desktop / Cowork: Settings → Connectors → Add custom connector. Tools used: `call-actor` (run an actor with an input), `get-actor-output` (full dataset items when `call-actor` returns a preview), `fetch-actor-details` (current input schema). Run the actors with the inputs that `apify_fetch.py --plan` prints, save the items to `raw_mcp/<stage>.json`, and normalize them with `--raw-dir`.
+- **`APIFY_TOKEN`** (REST, `apify_fetch.py` without flags): in the environment or in `.env`. Create one at console.apify.com → Settings → Integrations. In a cloud session it goes in the environment settings (secrets or environment variables), which a new session picks up. Never ask the user to paste it into chat, never print it, and never write it into report files.
 
 ## When a stage fails or returns 0 items
 

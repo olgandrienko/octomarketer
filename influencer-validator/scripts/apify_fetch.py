@@ -3,12 +3,18 @@
 Pull everything needed to validate one creator account via Apify, and write it
 in a normalized shape that compute_metrics.py understands.
 
-Usage:
+Usage (REST, needs APIFY_TOKEN):
   python apify_fetch.py --url https://www.tiktok.com/@someuser --out ./runs/someuser_tiktok
   python apify_fetch.py --platform linkedin --handle someone --out ./runs/someone_linkedin
   (--url auto-detects the platform from instagram.com / tiktok.com / youtube.com / linkedin.com / x.com / twitter.com)
 
 Needs APIFY_TOKEN in the environment (or in a .env file in the current dir).
+
+Usage (Apify MCP connector, no token in the sandbox):
+  python apify_fetch.py --url <link> --out <dir> --plan --only posts      # prints actor + input per stage
+  ... run each with the MCP `call-actor` tool, save its dataset items as <dir>/raw_mcp/<stage>.json ...
+  python apify_fetch.py --url <link> --out <dir> --raw-dir <dir>/raw_mcp --only posts
+  then repeat --plan / --raw-dir for comments, reactions (LinkedIn), profiles (IG/TikTok)
 
 Stages (each saves raw/*.json so a failed stage can be re-run with --only):
   posts      -> recent posts + profile (followers, bio)
@@ -69,7 +75,34 @@ def http(method, url, body=None, timeout=120):
         return json.loads(r.read().decode() or "null")
 
 
+MODE = {"stage": None, "platform": None, "raw_dir": None, "plan": None}
+
+
+def stage_name(actor):
+    st_ = MODE["stage"]
+    if st_ == "posts" and actor == ACTORS.get(MODE["platform"], {}).get("profile") and \
+            actor != ACTORS[MODE["platform"]]["posts"]:
+        return "profile"
+    return st_
+
+
 def run_actor(token, actor, inp, log, max_wait=900, show=False):
+    # MCP route: --plan prints what to run with the Apify MCP `call-actor` tool;
+    # --raw-dir reads the dataset items you saved from those calls (<stage>.json).
+    stage = stage_name(actor)
+    if MODE["plan"] is not None:
+        MODE["plan"].append({"stage": stage, "actor": actor, "input": inp,
+                             "save_items_to": f"{MODE['raw_dir'] or 'raw_mcp'}/{stage}.json"})
+        return []
+    if MODE["raw_dir"]:
+        f = os.path.join(MODE["raw_dir"], f"{stage}.json")
+        if not os.path.exists(f):
+            print(f"[!] {f} missing: run `call-actor` for stage '{stage}' and save its items there", file=sys.stderr)
+            return []
+        items = json.load(open(f))
+        items = items.get("items", items) if isinstance(items, dict) else items
+        log.append({"actor": actor, "status": "MCP", "items": len(items), "usd": 0})
+        return items
     if show:
         print(f"\n>>> {actor} input:\n{json.dumps(inp, indent=1)}")
     aid = actor.replace("/", "~")
@@ -441,6 +474,9 @@ def main():
     ap.add_argument("--only", choices=["posts", "comments", "reactions", "profiles"], action="append")
     ap.add_argument("--input-override", default="{}", help='JSON: {"posts": {...}, "comments": {...}}')
     ap.add_argument("--show-input", action="store_true")
+    ap.add_argument("--plan", action="store_true",
+                    help="Apify MCP route: print the actor + input for each requested stage instead of running it")
+    ap.add_argument("--raw-dir", help="Apify MCP route: folder with <stage>.json dataset items saved from call-actor")
     a = ap.parse_args()
 
     plat = a.platform or (detect_platform(a.url) if a.url else None)
@@ -451,7 +487,11 @@ def main():
         handle = a.url  # channel/ID URLs are passed through as-is
     else:
         handle = handle_of(plat, raw_handle)
-    token = load_token()
+    MODE["platform"] = plat
+    MODE["raw_dir"] = a.raw_dir
+    if a.plan:
+        MODE["plan"] = []
+    token = None if (a.plan or a.raw_dir) else load_token()
     ov = json.loads(a.input_override)
     os.makedirs(os.path.join(a.out, "raw"), exist_ok=True)
     P = lambda name: os.path.join(a.out, name)
@@ -459,6 +499,29 @@ def main():
     logf = P("fetch_log.json")
     log = json.load(open(logf)) if os.path.exists(logf) else []
 
+    if a.plan:
+        posts_ = json.load(open(P("posts.json"))) if os.path.exists(P("posts.json")) else []
+        chosen_ = pick_posts_for_comments(posts_, a.comment_posts)
+        comments_ = json.load(open(P("comments.json"))) if os.path.exists(P("comments.json")) else []
+        for stg in stages:
+            MODE["stage"] = stg
+            if stg == "posts":
+                fetch_posts(plat, handle, a.posts, token, log, ov, False)
+            elif not posts_:
+                print(f"[i] stage '{stg}' needs posts first: save posts.json items, run --raw-dir --only posts, then plan again",
+                      file=sys.stderr)
+            elif stg == "comments":
+                fetch_comments(plat, handle, chosen_, a.comments_per_post, token, log, ov, False)
+            elif stg == "reactions" and plat == "linkedin":
+                fetch_reactions(chosen_, a.reactions_per_post, token, log, ov, False)
+            elif stg == "profiles" and plat in ("instagram", "tiktok"):
+                need = list(dict.fromkeys(c["author"] for c in comments_
+                                          if c.get("author") and c["author"].lower() != handle.lower() and not c.get("author_bio")))
+                fetch_profiles(plat, need[: a.max_profiles], token, log, ov, False)
+        print(json.dumps(MODE["plan"], indent=1))
+        return
+
+    MODE["stage"] = "posts"
     if "posts" in stages:
         profile, posts = fetch_posts(plat, handle, a.posts, token, log, ov, a.show_input)
         profile.update({"platform": plat, "handle": handle, "fetched_at": datetime.now(timezone.utc).isoformat()})
@@ -467,12 +530,14 @@ def main():
     posts = json.load(open(P("posts.json")))
     chosen = pick_posts_for_comments(posts, a.comment_posts)
 
+    MODE["stage"] = "comments"
     if "comments" in stages:
         comments = fetch_comments(plat, handle, chosen, a.comments_per_post, token, log, ov, a.show_input)
         json.dump(comments, open(P("comments.json"), "w"), indent=1)
     comments = json.load(open(P("comments.json"))) if os.path.exists(P("comments.json")) else []
 
     reactions = []
+    MODE["stage"] = "reactions"
     if plat == "linkedin" and "reactions" in stages:
         reactions = fetch_reactions(chosen, a.reactions_per_post, token, log, ov, a.show_input)
         json.dump(reactions, open(P("reactions.json"), "w"), indent=1)
@@ -480,6 +545,7 @@ def main():
         reactions = json.load(open(P("reactions.json")))
 
     bios = {}
+    MODE["stage"] = "profiles"
     if "profiles" in stages and plat in ("instagram", "tiktok"):
         own = handle.lower()
         need, seen = [], set()

@@ -9,36 +9,37 @@ In crowded niches, follower counts and averages hide the truth. Some accounts lo
 
 The yardstick comes from a study of 1,526 creator accounts and 23,120 posts. The creator you check may be in a different niche, so the skill judges mainly against **what good vs bad profiles look like** (`references/good-vs-bad-profiles.md`). Those patterns are ratios and transfer across niches. The AI/marketing percentiles (`references/benchmarks.md`) are used only when the creator is in that niche.
 
-## Step 0: Check data access first and say so immediately
+## Step 0: Connect Apify first, then fall back
 
-The verdict is only worth something on **fresh** data, collected now. Never use old snapshots, cached numbers or remembered stats about a creator, and never present them as current. (The study behind this skill supplies benchmarks only, no per-creator data.)
+The verdict is only worth something on **fresh** data, collected now. Never use old snapshots, cached numbers or remembered stats about a creator, and never present them as current. The study behind this skill supplies benchmarks only, no per-creator data.
 
-Before anything else, check whether Apify is available: `APIFY_TOKEN` in the environment or in `.env`, or an Apify MCP connector (tools like `call-actor`).
+Apify is the default data source. Check for it in this order, before any other work:
 
-```bash
-[ -n "$APIFY_TOKEN" ] || grep -qs '^APIFY_TOKEN=' .env && echo apify-ok || echo no-apify
-```
+1. **Apify MCP connector already connected?** Look for its tools (`call-actor`, `fetch-actor-details`, `get-actor-output`; e.g. ToolSearch "apify call-actor"). If they are there, use the MCP route in step 2.
+2. **`APIFY_TOKEN` set?** `[ -n "$APIFY_TOKEN" ] || grep -qs '^APIFY_TOKEN=' .env`. If yes, use the REST route in step 2.
+3. **Neither: install the Apify MCP connector now**, and tell the user in one short message what you're doing and what they need to click. The user may be asked to approve in the interface; that is expected.
+   - **Claude Code (terminal or desktop app, with a shell):** run
+     `claude mcp add --transport http apify https://mcp.apify.com`
+     (the user approves the command). Then tell them how to authorize: type `/mcp`, pick **apify**, choose **Authenticate**, log in to Apify in the browser window (a free account works) and click **Allow**. Its tools load after the connector reconnects; if they don't appear, restart the session (`claude --continue` keeps the conversation). If they already have an Apify API token, `claude mcp add --transport http apify https://mcp.apify.com --header "Authorization: Bearer <token>"` skips the browser step. They run that themselves; never ask them to paste the token into chat.
+   - **Claude.ai, Claude desktop chat, Cowork or a cloud session:** if a connector tool is available (`SuggestConnectors`, `SearchMcpRegistry`), use it to show the Apify connector install card. Otherwise give the steps: **Settings → Connectors → Add custom connector**, name `Apify`, URL `https://mcp.apify.com`, **Add**, then **Connect**, log in to Apify and **Allow**. Connectors load when a chat or session starts, so they continue in a new one. In a cloud session, adding `APIFY_TOKEN` in the environment settings (environment menu → Edit → secrets or environment variables) also works.
+   - Ask for the product and ICP in the same message if they are missing (step 1), then wait.
+4. **Only if Apify isn't an option** (the user declines, can't sign up, or the connector won't authorize), offer the other fresh-data routes (details in `references/fresh-data-without-apify.md`):
+   - **Collect it live in their browser** with the Claude in Chrome extension or the built-in browser, logged into the platform. LinkedIn, Instagram and X hide most data from logged-out visitors, so a server-side fetch is not enough.
+   - **They upload the data:** the creator's own analytics export (best: audience job titles, seniority, industries and countries), a scraper export (PhantomBuster, Bright Data, Modash, HypeAuditor…) or screenshots, using the templates in `assets/`.
 
-**If there's no Apify access, say it in your very first message** before doing any work, and offer the fresh-data routes (details in `references/fresh-data-without-apify.md`):
+If no fresh data can be collected at all, stop and say what's needed. Don't produce a verdict.
 
-1. **Add an Apify token** (fastest, full check, ~$0.30–1.50 per account). They create one at console.apify.com → Settings → Integrations and store it as `APIFY_TOKEN`: in a cloud session via the environment settings (environment menu → Edit → secrets / environment variables; a new session picks it up), locally in `.env`. Never ask them to paste the token into chat.
-2. **Collect it live in their browser.** Use the Claude in Chrome extension or the built-in browser, logged into the platform. LinkedIn, Instagram and TikTok hide most data from logged-out visitors, so a server-side fetch is not enough. In a cloud session this needs their computer connected, or a Claude desktop/Chrome session.
-3. **They upload the data:** native analytics exports, a scraper export (PhantomBuster, Bright Data, Modash, HypeAuditor…) or screenshots, using the templates in `assets/`. The best source is the creator's own analytics (LinkedIn creator analytics, TikTok/IG insights, YouTube Studio): these show audience job titles, seniority, industries and countries, the strongest ICP evidence there is.
+**Reference first reply.** This is the most common start: links only, no Apify, no project. Keep to this shape and length, and adapt the platform details and the install steps to the surface you're in:
 
-Put this in the same single message as any missing context questions (step 1), then wait for their choice. If they name a route, follow it; don't re-ask.
-
-**Reference first reply.** This is the most common start: links only, no Apify, no project. Keep to this shape and length, and adapt the platform details:
-
-> I can't pull fresh data on these three yet. This session has no Apify access, and I won't judge them on old or remembered numbers. LinkedIn also hides posts and reactor lists from logged-out visitors, so I can't fetch them from here directly.
+> To check these three on fresh data I use Apify, and it isn't connected yet. I won't judge them on old or remembered numbers.
 >
-> **Pick one way to get fresh data:**
-> 1. **Add an Apify token.** Fastest; runs the full check for about $0.30–1.50 per creator. Create it at console.apify.com → Settings → Integrations, then add it as `APIFY_TOKEN` in this environment's settings (environment menu → Edit → secrets or environment variables). A new session picks it up. Please don't paste the token into chat.
-> 2. **Collect it in your browser.** I read each profile's recent posts, reactions, comments and the job headlines of the people engaging while you're logged in. This needs Claude desktop with the Chrome extension, or your computer connected to this session.
-> 3. **Upload the data.** Best is each creator's own analytics export (Content and Audience tabs: job titles, seniority, industries, countries). Scraper exports or screenshots also work, and I'll give you a CSV template.
+> **Let's connect it (about 2 minutes, free account works):**
+> 1. Approve the install prompt I'm about to run (`claude mcp add … apify`). In Claude.ai: Settings → Connectors → Add custom connector → `https://mcp.apify.com`.
+> 2. Authorize it: type `/mcp` → **apify** → **Authenticate**, log in to Apify and click **Allow**.
 >
-> **Two things I need either way:** the product or campaign, and your target buyer (role, seniority, company type, markets).
+> **Two things I need meanwhile:** the product or campaign, and your target buyer (role, seniority, company type, markets).
 >
-> I'll work out the likely competitors myself. Once I have the data, each creator gets GO / CONDITIONAL / NO-GO, plus a ranked comparison.
+> If you'd rather not use Apify, I can read the profiles in your logged-in browser (Claude in Chrome), or you can upload the creators' analytics exports or screenshots.
 
 ## Step 1: Context and links (keep questions to a minimum)
 
@@ -56,7 +57,21 @@ The skill needs two things: **who the campaign is for** (product + ICP) and **th
 
 ## Step 2: Collect fresh data (one folder per account; run accounts in parallel)
 
-**With Apify:**
+**With the Apify MCP connector:** the same actors and inputs as the REST script, run through `call-actor`:
+
+```bash
+python scripts/apify_fetch.py --url "<profile link>" --out runs/<handle>_<platform> --plan --only posts
+```
+
+Run each printed actor/input with `call-actor`. If it returns only a preview, fetch the full dataset with `get-actor-output`. Save the items as `runs/<handle>_<platform>/raw_mcp/<stage>.json`, then normalize them:
+
+```bash
+python scripts/apify_fetch.py --url "<profile link>" --out runs/<handle>_<platform> --raw-dir runs/<handle>_<platform>/raw_mcp --only posts
+```
+
+Repeat `--plan` / `--raw-dir` for `comments`, then `reactions` (LinkedIn) or `profiles` (Instagram, TikTok). The comment posts are picked from the saved posts, so each stage needs the one before it.
+
+**With an `APIFY_TOKEN` (REST):**
 
 ```bash
 python scripts/apify_fetch.py --url "<profile link>" --out runs/<handle>_<platform>
@@ -64,7 +79,7 @@ python scripts/apify_fetch.py --url "<profile link>" --out runs/<handle>_<platfo
 
 The platform is detected from the URL. Defaults: 25 recent posts, comments from 8 posts spread across low, middle and high performers (not just the viral one), up to 40 comments each, bios for up to 150 commenters (Instagram/TikTok), reactors with job headlines on LinkedIn. Report the Apify cost. If a stage fails or returns 0 items, see `references/apify-actors.md`. Don't continue silently with empty comments.
 
-**Without Apify (browser or upload):** follow `references/fresh-data-without-apify.md`. Fill `assets/posts_template.csv` and `assets/engagers_template.csv` (from the browser, from exports, or by transcribing screenshots), then convert:
+**Without Apify (browser or upload, only after step 0 ruled Apify out):** follow `references/fresh-data-without-apify.md`. Fill `assets/posts_template.csv` and `assets/engagers_template.csv` (from the browser, from exports, or by transcribing screenshots), then convert:
 
 ```bash
 python scripts/import_manual.py --platform linkedin --handle <handle> --followers <n> --source "browser 2026-11-05" \
